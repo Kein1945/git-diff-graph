@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@core/contracts": ["../src/contracts/index.ts"],
+      "@core/layout/sizes": ["../src/layout/sizes.ts"],
+      "@core/layout": ["../src/layout/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

@@ -1,0 +1,128 @@
+@import '@xyflow/react/dist/base.css';
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'Cascadia Code', monospace;
+
+  --color-canvas: #090b10;
+  --color-panel: #10131a;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-ink: #e6e8ee;
+  --color-ink-dim: #8b93a7;
+  --color-ink-faint: #5b6275;
+
+  --color-added: #34d399;
+  --color-removed: #fb7185;
+  --color-modified: #fbbf24;
+  --color-context: #64748b;
+  --color-accent: #818cf8;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── React Flow chrome ── */
+.react-flow {
+  --xy-background-color: transparent;
+}
+.react-flow__node {
+  /* Smoothly move nodes to their new place after a re-layout. */
+  transition:
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+.vc-instant .react-flow__node {
+  transition: none;
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+}
+.react-flow__minimap {
+  background: rgb(16 19 26 / 0.85);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+.react-flow__attribution {
+  display: none;
+}
+
+/* ── edges ── */
+.vc-edge {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition:
+    opacity 200ms ease,
+    stroke-width 150ms ease;
+}
+.vc-edge-flow {
+  stroke-dasharray: 2 10;
+  animation: vc-flow 1.1s linear infinite;
+}
+@keyframes vc-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+.vc-edges-enter {
+  animation: vc-fade 420ms ease both;
+}
+@keyframes vc-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vc-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(52 211 153 / 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(52 211 153 / 0);
+  }
+}
+.vc-live-dot {
+  animation: vc-pulse 2s ease-in-out infinite;
+}
+
+/* ── scrollbars ── */
+.vc-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.vc-scroll::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.08);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.vc-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(255 255 255 / 0.16);
+}
+.vc-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
