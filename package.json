@@ -20,6 +20,14 @@
   ],
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kein1945/git-diff-graph.git"
+  },
+  "homepage": "https://github.com/Kein1945/git-diff-graph#readme",
+  "bugs": {
+    "url": "https://github.com/Kein1945/git-diff-graph/issues"
+  },
   "bin": {
     "git-diff-graph": "dist/cli.js"
   },

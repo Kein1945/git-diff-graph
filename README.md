@@ -6,9 +6,9 @@
 
 Built for reviewing what you or an AI agent (Cursor, Claude Code, Copilot…) just changed, before you commit it.
 
-![Overview: changed folders and files with import arrows between them](docs/overview.png)
+![Overview: changed folders and files with import arrows between them](https://raw.githubusercontent.com/Kein1945/git-diff-graph/master/docs/overview.png)
 
-![Jump to a function and read its diff with syntax highlighting](docs/diff-panel.png)
+![Jump to a function and read its diff with syntax highlighting](https://raw.githubusercontent.com/Kein1945/git-diff-graph/master/docs/diff-panel.png)
 
 ## Quick start
 
