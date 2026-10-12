@@ -1,85 +1,128 @@
 # git-diff-graph
 
-Показывает изменения в git-репозитории как интерактивный граф: папки → файлы → классы и функции → код. Видно не только *что* изменилось, но и *с чем это связано*: какие импорты появились или пропали и кто зависит от изменённых файлов.
+**See your git changes as a map, not a wall of text.**
+
+`git-diff-graph` turns `git diff` into an interactive graph in your browser: folders → files → classes and functions → code. You see not only *what* changed, but *how it connects*: which imports were added or removed, and which files depend on the code you touched.
+
+Built for reviewing what you or an AI agent (Cursor, Claude Code, Copilot…) just changed, before you commit it.
+
+![Overview: changed folders and files with import arrows between them](docs/overview.png)
+
+![Jump to a function and read its diff with syntax highlighting](docs/diff-panel.png)
+
+## Quick start
+
+Install it once, globally:
 
 ```bash
-git-diff-graph                 # HEAD → рабочее дерево (включая untracked), live-обновление
-git-diff-graph HEAD~3          # последние 3 коммита + незакоммиченное
-git-diff-graph main feature    # между двумя ref'ами
-git-diff-graph --cwd ../repo --port 5000 --no-open
+npm install -g git-diff-graph
 ```
 
-## Установка (локально, без публикации в npm)
+Then run it from any git repository:
 
 ```bash
-npm install
-npm run build
-npm link        # после этого `git-diff-graph` и `npx git-diff-graph` работают в любом репозитории
+cd my-project
+git-diff-graph
 ```
 
-## Как пользоваться
+A browser tab opens with your uncommitted changes, and it updates live as you edit files. No install? Use `npx git-diff-graph`.
 
-| Действие | Что происходит |
+### What to compare
+
+```bash
+git-diff-graph                    # HEAD → working tree (incl. untracked files), live updates
+git-diff-graph HEAD~3             # last 3 commits + uncommitted changes
+git-diff-graph main feature       # between two branches, tags or commits
+git-diff-graph --cwd ../other-repo --port 5000 --no-open
+```
+
+| Option | Meaning |
 |---|---|
-| клик по имени / шеврон / двойной клик | раскрыть или свернуть папку, файл, класс; у функции — показать код |
-| клик по блоку | боковая панель: diff, импорты, кто импортирует |
-| наведение | подсветка связей узла, всё остальное приглушается |
-| наведение на строку блока → **stage** / **unstage** | `git add` / `git restore --staged` для папки или файла; для функции — только её строки |
-| **Zoom ▾** | свернуть всё до уровня: Modules (верхние папки) / Files / Functions |
-| **Commit** | поле для сообщения, `Enter` — коммит staged-изменений, `Esc` — отмена |
-| `/` или `Ctrl+K` | поиск символа или файла, `Enter` — перелёт к нему |
-| `F` | вписать граф в экран |
-| **Context** | показать или скрыть неизменённых соседей |
+| `[base]` | Ref to compare from. Default: `HEAD` |
+| `[target]` | Ref to compare to. Default: the working tree |
+| `--port <port>` | Local server port. Default: `4173` (next free port is used if busy) |
+| `--no-open` | Don't open the browser |
+| `--no-watch` | Don't rebuild the graph when files change |
+| `--cwd <dir>` | Repository folder. Default: current folder |
 
-Stage и Commit доступны в режиме `HEAD → рабочее дерево` (запуск без аргументов). Staged-блоки обведены индиго-рамкой с галочкой, частично staged — полупрозрачной рамкой.
+### What you get
 
-Цвета: зелёный — добавлено, янтарный — изменено, красный — удалено, серый пунктир — контекст. Стрелки идут **от зависимости к зависимому** (`api → component`). Показываются только связи, относящиеся к изменению: импорты между изменёнными файлами, новые и удалённые импорты, неизменённые файлы, которые импортируют изменённые (affected). Старые импорты изменённого файла на нетронутые файлы скрыты. Зелёные анимированные рёбра — новые импорты, красные пунктирные — удалённые. Свёрнутые узлы объединяют рёбра детей (`×N`).
+- **Zoom from architecture to code.** Folders, files, classes and functions nest inside each other. Open a function to read its diff right in the graph. The **Zoom ▾** menu folds everything back to Modules, Files or Functions in one click.
+- **Only what matters.** Changed files, the imports that were added or removed, and unchanged files that *depend* on your changes. Old imports to untouched files are hidden.
+- **Readable layout.** Blocks never overlap and arrows cross as little as possible. Arrows point from a dependency to its dependent (`api → component`).
+- **Stage and commit from the graph.** Hover a block and press **stage**: a folder, a file, or just the lines of one function go to the git index. Then **Commit** with a message.
+- **Live.** Edit code, or let your agent edit it, and the graph updates by itself.
 
-При сильном отдалении подписи увеличиваются, а код в узлах рисуется силуэтом diff'а (семантический zoom).
+Requires Node.js 20+ and git. Functions and imports are understood for TypeScript and JavaScript (`.ts .tsx .js .jsx .mjs .cjs`). Other languages are shown at the file level with full diffs.
 
-## Архитектура
+## How to use
 
-Конвейер из независимых этапов. Каждый этап — модуль со своим `index.ts`, который общается с остальными **только через контракты** из `src/contracts`.
+| Action | What happens |
+|---|---|
+| click the name / chevron, or double-click | expand or collapse a folder, file or class; for a function, show its code |
+| click a block | side panel: diff, imports, imported by |
+| hover | highlights the block's connections and dims everything else |
+| hover a block's header → **stage** / **unstage** | `git add` / `git restore --staged` for a folder or file; for a function, only its lines |
+| **Zoom ▾** | collapse everything to one level: Modules (top folders) / Files / Functions |
+| **Commit** | type a message, `Enter` commits the staged changes, `Esc` cancels |
+| `/` or `Ctrl+K` | find a symbol or file, `Enter` flies to it |
+| `F` | fit the graph to the screen |
+| **Context** | show or hide unchanged neighbours |
+
+Stage and Commit are available when comparing `HEAD → working tree` (running without arguments). Staged blocks get an indigo frame with a check mark; partly staged blocks get a faint frame.
+
+Colors: green — added, amber — modified, red — removed, grey dashed — context (unchanged, but connected by imports). Animated green arrows are new imports, dashed red arrows are removed ones. Collapsed blocks merge their children's arrows (`×N`).
+
+When you zoom far out, labels grow and code inside blocks is drawn as a silhouette of the diff (semantic zoom).
+
+## Architecture
+
+A pipeline of independent stages. Each stage is a module with its own `index.ts` that talks to the others **only through the contracts** in `src/contracts`.
 
 ```
 git ──► ChangeSet ──► analysis ──► CodeGraph ──► layout(+ViewState) ──► LayoutResult ──► viewer
 ```
 
-| Модуль | Вход → выход | Что внутри |
+| Module | Input → output | Inside |
 |---|---|---|
-| `src/contracts` | — | zod-схемы и типы: `ChangeSet`, `CodeGraph`, `LayoutResult`, `SourceReader` |
-| `src/git` | репозиторий → `ChangeSet`; `GitActions` | парсер unified diff, чтение файлов через `git cat-file --batch`, состояние индекса, stage/unstage (в т.ч. строк одной функции) и commit |
-| `src/diff` | — | чистые функции над diff'ом: полный вид файла, применение части изменений, перевод номеров строк; общие для `git` и `analysis` |
-| `src/analysis` | `ChangeSet` + `SourceReader` → `CodeGraph` | tree-sitter: символы, их статусы по hunk'ам, staged-состояние, импорты и их diff, affected-соседи, папки |
-| `src/layout` | `CodeGraph` + `ViewState` → `LayoutResult` | ELK (layered, вложенные узлы, ортогональные рёбра), агрегация рёбер свёрнутых узлов |
-| `src/pipeline.ts` | — | единственное место, где git и analysis соединяются |
-| `src/server` | `getGraph()` + `actions` → HTTP | `/api/graph`, SSE `/api/events`, `POST /api/stage` и `/api/commit` (по токену), watch файлов, статика viewer'а |
-| `web/` | `CodeGraph` → UI | React Flow + Tailwind + shiki; импортирует только `contracts` и `layout` |
+| `src/contracts` | — | zod schemas and types: `ChangeSet`, `CodeGraph`, `LayoutResult`, `SourceReader` |
+| `src/git` | repository → `ChangeSet`; `GitActions` | unified diff parser, file reads via `git cat-file --batch`, index state, stage/unstage (including the lines of one function) and commit |
+| `src/diff` | — | pure functions over diffs: full-file view, applying part of a change, line number mapping; shared by `git` and `analysis` |
+| `src/analysis` | `ChangeSet` + `SourceReader` → `CodeGraph` | tree-sitter: symbols and their status from hunks, staged state, imports and their diff, affected dependents, folders |
+| `src/layout` | `CodeGraph` + `ViewState` → `LayoutResult` | ELK (layered, nested nodes, orthogonal edges), merging edges of collapsed nodes |
+| `src/pipeline.ts` | — | the only place where git and analysis meet |
+| `src/server` | `getGraph()` + `actions` → HTTP | `/api/graph`, SSE `/api/events`, `POST /api/stage` and `/api/commit` (token protected), file watching, viewer assets |
+| `web/` | `CodeGraph` → UI | React Flow + Tailwind + shiki; imports only `contracts` and `layout` |
 
-Каждый этап можно проверить отдельно:
+Every stage can be inspected on its own:
 
 ```bash
-git-diff-graph changeset HEAD~1 HEAD   # что увидел git
-git-diff-graph graph HEAD~1 HEAD       # что построил анализ
-git-diff-graph layout HEAD~1 HEAD      # координаты (всё раскрыто)
+git-diff-graph changeset HEAD~1 HEAD   # what git saw
+git-diff-graph graph HEAD~1 HEAD       # what analysis built
+git-diff-graph layout HEAD~1 HEAD      # coordinates (everything expanded)
 ```
 
-### Языки
+### Languages
 
-Уровень файлов и diff работает для любого языка. Символы и импорты пока поддерживаются для TS/TSX/JS/JSX (`src/analysis/adapters/typescript.ts`). Новый язык добавляется одним адаптером по интерфейсу `LanguageAdapter` (`src/analysis/adapters/types.ts`); остальной конвейер не меняется. Wasm-грамматики tree-sitter лежат в `grammars/`.
+The file level and diffs work for any language. Symbols and imports are supported for TS/TSX/JS/JSX (`src/analysis/adapters/typescript.ts`). A new language is one adapter implementing `LanguageAdapter` (`src/analysis/adapters/types.ts`); the rest of the pipeline stays the same. tree-sitter wasm grammars live in `grammars/`.
 
-## Разработка
+## Development
 
 ```bash
-npm test            # vitest: каждый модуль в изоляции (git на временных репозиториях)
-npm run typecheck   # node-часть и viewer
+npm install
 npm run build       # viewer (vite → dist/web) + CLI (tsup → dist/cli.js)
-npm run dev:web     # viewer с HMR; проксирует /api на запущенный `git-diff-graph --no-open`
+npm link            # makes `git-diff-graph` available globally from this checkout
 ```
 
-## Дальше (не в MVP)
+```bash
+npm test            # vitest: every module in isolation (git tests use temporary repositories)
+npm run typecheck   # node side and viewer
+npm run dev:web     # viewer with HMR; proxies /api to a running `git-diff-graph --no-open`
+```
 
-- рёбра вызовов между функциями (`parseCalls` в адаптере, эвристика через импорты);
-- снапшоты итераций агента в `refs/git-diff-graph/*` и слайдер истории;
-- адаптер C#;
-- стабильность раскладки между раскрытиями.
+## Roadmap
+
+- call edges between functions (`parseCalls` in the adapter, resolved through imports);
+- snapshots of agent iterations in `refs/git-diff-graph/*` with a history slider;
+- C# adapter;
+- layout stability between expand/collapse.
