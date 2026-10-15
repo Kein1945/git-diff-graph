@@ -126,11 +126,13 @@ export async function getChangeSet(opts: ChangeSetOptions): Promise<ChangeSet> {
       .map(async (f): Promise<FileChange> => {
         const staging = withStaging
           ? untracked.has(f.path)
-            ? { staged: [], unstaged: f.hunks }
+            ? { staged: [], unstaged: f.hunks, hasStaged: false, hasUnstaged: true }
             : {
                 indexContent: f.binary ? undefined : await readIndex(repoRoot, f.path),
                 staged: stagedHunks.get(f.path) ?? [],
                 unstaged: unstagedHunks.get(f.path) ?? [],
+                hasStaged: stagedHunks.has(f.path),
+                hasUnstaged: unstagedHunks.has(f.path),
               }
           : undefined;
         if (f.binary) return { ...f, staging };
@@ -146,11 +148,13 @@ export async function getChangeSet(opts: ChangeSetOptions): Promise<ChangeSet> {
     ? splitZ(await git(repoRoot, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']))
     : splitZ(await git(repoRoot, ['ls-tree', '-r', '--name-only', '-z', targetSha]));
   const deleted = new Set(files.filter((f) => f.status === 'deleted').map((f) => f.path));
+  const branch = (await tryGit(repoRoot, ['symbolic-ref', '--short', '-q', 'HEAD']))?.trim() || undefined;
 
   return {
     repoRoot,
     base: baseLabel,
     target,
+    ...(branch && { branch }),
     files,
     repoFiles: [...new Set(repoFiles)].filter((f) => !deleted.has(f)).sort(),
   };

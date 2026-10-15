@@ -186,6 +186,7 @@ export function createAnalyzer(options: AnalyzerOptions = {}): Analyzer {
             stats: s.stats,
             language: adapter.id,
             staged: s.status === 'unchanged' ? undefined : rangeStaged(change, s.ranges),
+            exported: s.exported,
           });
         }
 
@@ -235,6 +236,7 @@ export function createAnalyzer(options: AnalyzerOptions = {}): Analyzer {
           repoRoot: changeSet.repoRoot,
           base: changeSet.base,
           target: changeSet.target,
+          branch: changeSet.branch,
           generatedAt: new Date().toISOString(),
           staging: changeSet.base === 'HEAD' && changeSet.target === WORKTREE,
         },

@@ -2,13 +2,15 @@ import type { CodeGraph, LayoutResult } from '@core/contracts';
 import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DiffPanel } from './components/DiffPanel';
+import { HotkeysHelp } from './components/HotkeysHelp';
 import { EdgeMarkers, EdgeView, type VcEdge } from './components/EdgeView';
 import { NodeView, type VcNode } from './components/NodeView';
 import { Legend, TopBar } from './components/TopBar';
 import { commit, fetchGraph, stage, subscribe, type GraphResponse } from './lib/api';
 import { ViewContext, type ViewContextValue } from './lib/context';
 import { LayoutClient } from './lib/layout-client';
-import { ancestorsOf, expandedForLevel, initialExpanded, nodeColor, withoutContext, type ZoomLevel } from './lib/view';
+import { usePersistentState } from './lib/persist';
+import { ancestorsOf, expandedForLevel, filterGraph, GRAPH_FILTERS, nodeColor, PANEL_WIDTH, panelWidthPx, type GraphFilter, type ZoomLevel } from './lib/view';
 
 const nodeTypes = { vc: NodeView };
 const edgeTypes = { vc: EdgeView };
@@ -24,7 +26,7 @@ function absolutePositions(layout: LayoutResult): Map<string, { x: number; y: nu
 
 /** Padding for flying to a node: keep it clear of the diff panel on the right. */
 function focusPadding() {
-  const panel = Math.min(620, window.innerWidth * 0.46) + 48;
+  const panel = panelWidthPx() + 48;
   return { top: '18%', bottom: '18%', left: '12%', right: `${Math.round(panel)}px` } as const;
 }
 
@@ -56,17 +58,18 @@ function toFlow(layout: LayoutResult): { nodes: VcNode[]; edges: VcEdge[] } {
 function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<void> }) {
   const rf = useReactFlow<VcNode, VcEdge>();
   const client = useMemo(() => new LayoutClient(), []);
-  const [hideContext, setHideContext] = useState(false);
-  const graph: CodeGraph = useMemo(() => (hideContext ? withoutContext(data.graph) : data.graph), [data.graph, hideContext]);
+  const [savedFilter, setFilter] = usePersistentState<GraphFilter>('filter', 'changes');
+  const filter: GraphFilter = GRAPH_FILTERS.some((f) => f.id === savedFilter) && (savedFilter !== 'unstaged' || data.graph.meta.staging) ? savedFilter : 'changes';
+  const graph: CodeGraph = useMemo(() => filterGraph(data.graph, filter), [data.graph, filter]);
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => initialExpanded(data.graph));
+  const [expanded, setExpanded] = useState<Set<string>>(() => expandedForLevel(graph, 'files'));
   const knownIds = useRef(new Set(data.graph.nodes.map((n) => n.id)));
   const [layout, setLayout] = useState<LayoutResult>();
   const [flow, setFlow] = useState<{ nodes: VcNode[]; edges: VcEdge[] }>({ nodes: [], edges: [] });
   const [selectedId, setSelectedId] = useState<string>();
   const [hoverId, setHoverId] = useState<string>();
   const [query, setQuery] = useState('');
-  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>();
+  const [zoomLevel, setZoomLevel] = useState<ZoomLevel | undefined>('files');
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState<string>();
   useEffect(() => {
@@ -75,6 +78,7 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
     return () => clearTimeout(t);
   }, [notice]);
   const [animate, setAnimate] = useState(false);
+  const [help, setHelp] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // What the camera should do after the next layout.
@@ -84,7 +88,7 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
   useEffect(() => {
     const fresh = data.graph.nodes.filter((n) => !knownIds.current.has(n.id));
     if (!fresh.length) return;
-    const defaults = initialExpanded(data.graph);
+    const defaults = expandedForLevel(data.graph, 'files');
     setExpanded((prev) => new Set([...prev, ...fresh.map((n) => n.id).filter((id) => defaults.has(id))]));
     for (const n of fresh) knownIds.current.add(n.id);
   }, [data.graph]);
@@ -235,18 +239,61 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
     [graph, byId, parents, selectedId, focus, visibleHits, toggle, data.graph.meta.staging, stageNode, busy],
   );
 
+  const fit = useCallback(() => void rf.fitView({ padding: 0.08, duration: 500 }), [rf]);
+  const pickFilter = useCallback(
+    (f: GraphFilter) => {
+      if (f === filter || (f === 'unstaged' && !data.graph.meta.staging)) return;
+      pending.current = { kind: 'fit' };
+      setFilter(f);
+    },
+    [filter, data.graph.meta.staging, setFilter],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key === '/' || (e.key === 'k' && (e.ctrlKey || e.metaKey))) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (help) {
+        if (e.key === 'Escape' || e.key === '?') setHelp(false);
+        return;
+      }
+      if (e.key === 'k' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         searchRef.current?.focus();
-      } else if (e.key === 'Escape') setSelectedId(undefined);
-      else if (e.key === 'f') void rf.fitView({ padding: 0.08, duration: 500 });
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Physical keys (`e.code`) so shortcuts work with any keyboard layout.
+      const sel = selectedId && layout?.nodes.find((n) => n.id === selectedId);
+      let handled = true;
+      if (e.key === '?' || (e.code === 'Slash' && e.shiftKey)) setHelp(true);
+      else if (e.code === 'Slash') searchRef.current?.focus();
+      else if (e.key === 'Escape') setSelectedId(undefined);
+      else if (e.code === 'Digit1' && e.shiftKey) fit();
+      else if (e.code === 'KeyF') fit();
+      else if (e.code === 'Digit1') pickFilter('context');
+      else if (e.code === 'Digit2') pickFilter('changes');
+      else if (e.code === 'Digit3') pickFilter('unstaged');
+      else if (e.code === 'KeyS') {
+        const node = selectedId ? byId.get(selectedId) : undefined;
+        if (node && data.graph.meta.staging && !node.isContext && node.staged !== undefined && !busy.has(node.id)) {
+          stageNode(node.id, node.staged === 'full' ? 'unstage' : 'stage');
+        }
+      } else if (e.code === 'KeyQ') {
+        // Collapse the selected block, or (if it is not open) the block it sits in.
+        if (!sel) return;
+        if (sel.expanded) toggle(sel.id);
+        else if (sel.parentId) {
+          setSelectedId(sel.parentId);
+          toggle(sel.parentId);
+        }
+      } else if (e.code === 'KeyE') {
+        if (sel && sel.expandable && !sel.expanded) toggle(sel.id);
+      } else handled = false;
+      if (handled) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rf]);
+  }, [layout, selectedId, help, byId, busy, data.graph.meta.staging, fit, pickFilter, stageNode, toggle]);
 
   return (
     <ViewContext.Provider value={ctx}>
@@ -262,6 +309,9 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
+          // Keyboard navigation is our own (A/D/Q/E); focusable wrappers only add a browser focus ring.
+          nodesFocusable={false}
+          edgesFocusable={false}
           zoomOnDoubleClick={false}
           onNodeClick={(_, n) => setSelectedId(n.id)}
           onNodeDoubleClick={(_, n) => n.data.layout.expandable && toggle(n.id)}
@@ -284,7 +334,7 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
             nodeStrokeWidth={0}
             nodeBorderRadius={6}
             maskColor="rgb(9 11 16 / 0.72)"
-            style={{ width: 180, height: 120, right: selectedId ? 'calc(min(620px, 46vw) + 12px)' : undefined }}
+            style={{ width: 180, height: 120, right: selectedId ? `calc(${PANEL_WIDTH} + 12px)` : undefined }}
           />
         </ReactFlow>
 
@@ -294,16 +344,13 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
           live={data.live}
           query={query}
           hits={searchHits.size}
-          hideContext={hideContext}
+          filter={filter}
           onQuery={setQuery}
           onSearchEnter={() => {
             const first = [...searchHits].sort((a, b) => (byId.get(a)!.isContext ? 1 : 0) - (byId.get(b)!.isContext ? 1 : 0))[0];
             if (first) reveal(first);
           }}
-          onToggleContext={() => {
-            pending.current = { kind: 'fit' };
-            setHideContext((v) => !v);
-          }}
+          onFilter={pickFilter}
           zoomLevel={zoomLevel}
           onZoomLevel={(level) => {
             pending.current = { kind: 'fit' };
@@ -314,7 +361,7 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
             await commit(message);
             await reload();
           }}
-          onFit={() => void rf.fitView({ padding: 0.08, duration: 500 })}
+          onFit={fit}
         />
         <Legend staging={data.graph.meta.staging} />
         {notice && (
@@ -323,6 +370,7 @@ function Viewer({ data, reload }: { data: GraphResponse; reload: () => Promise<v
           </div>
         )}
         <DiffPanel onReveal={reveal} />
+        {help && <HotkeysHelp onClose={() => setHelp(false)} />}
       </div>
     </ViewContext.Provider>
   );

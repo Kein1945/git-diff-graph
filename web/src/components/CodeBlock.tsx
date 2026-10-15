@@ -10,6 +10,8 @@ const ROW_BG = {
 } as const;
 const SIGN_COLOR = { add: 'text-added', del: 'text-removed', ctx: 'text-ink-faint' } as const;
 const SIGN = { add: '+', del: '−', ctx: ' ' } as const;
+/** Dashed underline: clicking copies something (an action, not a link). */
+const COPYABLE = 'underline decoration-ink-faint/40 decoration-dashed underline-offset-[3px] group-hover/row:text-ink-dim group-hover/row:decoration-ink-faint';
 
 type Row = { kind: 'line'; line: DiffLine; index: number } | { kind: 'gap'; from: number; to: number };
 
@@ -42,6 +44,7 @@ export function CodeBlock({
   context,
   numbers = true,
   maxLines,
+  onLineClick,
 }: {
   lines: readonly DiffLine[];
   lang: string | undefined;
@@ -49,6 +52,8 @@ export function CodeBlock({
   context?: number;
   numbers?: boolean;
   maxLines?: number;
+  /** Makes rows clickable (ignored while the user is selecting text). */
+  onLineClick?: (line: DiffLine) => void;
 }) {
   const [tokens, setTokens] = useState<ThemedToken[][]>();
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
@@ -73,7 +78,8 @@ export function CodeBlock({
   const width = String(Math.max(...lines.map((l) => l.new ?? l.old ?? 0), 1)).length;
 
   return (
-    <div className="font-mono text-[12px] leading-[18px]">
+    // `w-max min-w-full`: rows are as wide as the longest line, so their backgrounds scroll with the text.
+    <div className="w-max min-w-full font-mono text-[12px] leading-[18px]">
       {rows.map((row) =>
         row.kind === 'gap' ? (
           <button
@@ -87,19 +93,31 @@ export function CodeBlock({
             <span className="h-px flex-1 bg-line" />
           </button>
         ) : (
-          <div key={row.index} className={`flex whitespace-pre ${ROW_BG[row.line.t]}`}>
+          <div
+            key={row.index}
+            className={`group/row flex whitespace-pre ${ROW_BG[row.line.t]} ${onLineClick ? 'cursor-pointer hover:bg-white/[0.05]' : ''}`}
+            onClick={
+              onLineClick &&
+              (() => {
+                if (window.getSelection()?.toString()) return;
+                onLineClick(row.line);
+              })
+            }
+          >
             {numbers && (
               <>
-                <span className="w-[calc(var(--w)*1ch+12px)] shrink-0 select-none pr-2 text-right text-ink-faint/70" style={{ '--w': width } as React.CSSProperties}>
+                <span className={`w-[calc(var(--w)*1ch+12px)] shrink-0 select-none pr-2 text-right text-ink-faint/70 ${onLineClick ? COPYABLE : ''}`} style={{ '--w': width } as React.CSSProperties}>
                   {row.line.old ?? ''}
                 </span>
-                <span className="w-[calc(var(--w)*1ch+12px)] shrink-0 select-none pr-2 text-right text-ink-faint/70" style={{ '--w': width } as React.CSSProperties}>
+                <span className={`w-[calc(var(--w)*1ch+12px)] shrink-0 select-none pr-2 text-right text-ink-faint/70 ${onLineClick ? COPYABLE : ''}`} style={{ '--w': width } as React.CSSProperties}>
                   {row.line.new ?? ''}
                 </span>
               </>
             )}
             <span className={`w-5 shrink-0 select-none text-center ${SIGN_COLOR[row.line.t]}`}>{SIGN[row.line.t]}</span>
-            <span className={`pr-4 ${row.line.t === 'del' ? 'opacity-70' : ''}`}>
+            <span
+              className={`pr-4 ${row.line.t === 'del' ? 'opacity-70' : ''} ${onLineClick ? 'decoration-ink-faint/60 decoration-dashed underline-offset-[3px] group-hover/row:underline' : ''}`}
+            >
               {tokens?.[row.index]
                 ? tokens[row.index]!.map((t, k) => (
                     <span key={k} style={{ color: t.color }}>

@@ -39,6 +39,35 @@ const notAFunction = 5;
     ]);
   });
 
+  it('marks exported symbols and internal ones', () => {
+    const code = `export function pub() {}
+function local() { function nested() {} }
+export const arrow = () => 1;
+const later = () => 2;
+const hidden = () => 3;
+export { later as renamed };
+export default class Svc {
+  private a() {}
+  #b() {}
+  c() {}
+}
+`;
+    const flat = (list: SymbolInfo[]): [string, boolean | undefined][] =>
+      list.flatMap((s) => [[s.name, s.exported] as [string, boolean | undefined], ...flat(s.children)]);
+    expect(flat(ts.parseSymbols(code, 'e.ts'))).toEqual([
+      ['pub', true],
+      ['local', false],
+      ['nested', false],
+      ['arrow', true],
+      ['later', true],
+      ['hidden', false],
+      ['Svc', true],
+      ['a', false],
+      ['#b', false],
+      ['c', undefined],
+    ]);
+  });
+
   it('includes the export keyword line in the range', () => {
     const [sym] = ts.parseSymbols('export const f = async () => {\n  return 1;\n};\n', 'a.ts');
     expect(sym!.range).toEqual({ start: 1, end: 3 });
@@ -210,5 +239,22 @@ describe('staged state', () => {
       ['sym:f.ts#f1', 'full'],
       ['sym:f.ts#f2', 'none'],
     ]);
+  });
+
+  it('marks a pure rename (no hunks) by whether it is in the index', async () => {
+    const body = 'export const x = 1;\n';
+    const renamed = (staging: { hasStaged: boolean; hasUnstaged: boolean }) => ({
+      ...change('new.ts', body, body),
+      oldPath: 'old.ts',
+      status: 'renamed' as const,
+      hunks: [],
+      staging: { staged: [], unstaged: [], ...staging },
+    });
+    const staged = (c: ReturnType<typeof renamed>) =>
+      createAnalyzer({ adapters: [ts] })
+        .analyze({ repoRoot: '/r', base: 'HEAD', target: 'WORKTREE', repoFiles: ['new.ts'], files: [c] }, { readTarget: async () => body })
+        .then((g) => g.nodes.find((n) => n.id === 'file:new.ts')!.staged);
+    expect(await staged(renamed({ hasStaged: true, hasUnstaged: false }))).toBe('full');
+    expect(await staged(renamed({ hasStaged: false, hasUnstaged: true }))).toBe('none');
   });
 });

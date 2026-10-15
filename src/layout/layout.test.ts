@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeGraph, GraphEdge, GraphNode, LayoutNode } from '../contracts/index.js';
-import { aggregateEdges, computeLayout } from './index.js';
+import { aggregateEdges, computeLayout, SIZES } from './index.js';
 
 function node(id: string, kind: GraphNode['kind'], parentId?: string): GraphNode {
   return {
@@ -78,6 +78,34 @@ describe('computeLayout', () => {
       expect(n.y + n.height).toBeLessThanOrEqual(p.height);
     }
     for (const e of layout.edges) expect(e.points.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps the importer left of its dependency, with the arrow running right to left', async () => {
+    const chain: CodeGraph = {
+      ...graph,
+      nodes: [node('file:app', 'file'), node('file:util', 'file')],
+      edges: [edge('file:app', 'file:util')],
+    };
+    const layout = await computeLayout(chain, { expanded: new Set() });
+    const byId = new Map(layout.nodes.map((n) => [n.id, n]));
+    const app = byId.get('file:app')!;
+    const util = byId.get('file:util')!;
+    expect(app.x + app.width).toBeLessThanOrEqual(util.x);
+
+    const [e] = layout.edges;
+    expect([e!.source, e!.target]).toEqual(['file:util', 'file:app']);
+    expect(e!.points[0]!.x).toBeGreaterThan(e!.points.at(-1)!.x);
+  });
+
+  it('aligns symbols of a file on the left, past the export gutter', async () => {
+    const wide: CodeGraph = {
+      ...graph,
+      nodes: [...graph.nodes, node('sym:a#aMuchLongerFunctionNameThanTheOthers', 'function', 'file:a')],
+    };
+    const layout = await computeLayout(wide, view);
+    const xs = layout.nodes.filter((n) => n.parentId === 'file:a').map((n) => n.x);
+    expect(xs).toHaveLength(3);
+    expect(new Set(xs)).toEqual(new Set([SIZES.symbolGutter]));
   });
 
   it('is deterministic', async () => {

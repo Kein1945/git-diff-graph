@@ -79,6 +79,7 @@ describe('getChangeSet', () => {
     const cs = await getChangeSet({ cwd: repo.root });
     ChangeSetSchema.parse(cs);
     expect(cs.target).toBe(WORKTREE);
+    expect(cs.branch).toBe('main');
     expect(cs.files.map((f) => [f.path, f.status, f.binary])).toEqual([
       ['a.ts', 'modified', false],
       ['b.ts', 'deleted', false],
@@ -105,6 +106,13 @@ describe('getChangeSet', () => {
     expect(cs.files[0]).toMatchObject({ path: 'dir/new.ts', oldPath: 'old.ts', status: 'renamed' });
     expect(cs.files[0]!.newContent).toContain('line three');
     expect(await createSourceReader(cs.repoRoot, second).readTarget('dir/new.ts')).toContain('line three');
+  });
+
+  it('omits the branch when HEAD is detached', async () => {
+    repo = new TempRepo();
+    const sha = repo.write('a.ts', 'a\n').commit();
+    repo.git('checkout', '-q', '--detach', sha);
+    expect((await getChangeSet({ cwd: repo.root })).branch).toBeUndefined();
   });
 
   it('works in a repository without commits', async () => {

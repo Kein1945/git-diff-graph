@@ -1,6 +1,6 @@
 {
   "name": "git-diff-graph",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Visualize git diffs as an interactive graph: modules → files → functions → code, with import changes, stage and commit",
   "keywords": [
     "git",

@@ -6,6 +6,8 @@ export interface SymbolInfo {
   name: string;
   /** 1-based inclusive line range. */
   range: LineRange;
+  /** Visible outside the module (`true`) or internal (`false`); absent when it does not apply. */
+  exported?: boolean;
   children: SymbolInfo[];
 }
 

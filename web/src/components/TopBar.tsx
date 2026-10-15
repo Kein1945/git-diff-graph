@@ -1,13 +1,15 @@
 import type { CodeGraph } from '@core/contracts';
-import { Check, ChevronDown, Eye, EyeOff, GitCommitHorizontal, GitCompareArrows, Layers, LoaderCircle, Scan, Search, X } from 'lucide-react';
+import { Check, ChevronDown, GitCommitHorizontal, GitCompareArrows, Layers, LoaderCircle, Scan, Search, X } from 'lucide-react';
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { ZOOM_LEVELS, type ZoomLevel } from '../lib/view';
+import { GRAPH_FILTERS, ZOOM_LEVELS, type GraphFilter, type ZoomLevel } from '../lib/view';
 
 const btn =
   'flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-ink-dim transition hover:bg-white/[0.07] hover:text-ink disabled:opacity-40';
 
-function shortRef(ref: string) {
+/** `HEAD` (and `HEAD~n`, `HEAD^`) reads as the checked-out branch unless HEAD is detached. */
+function shortRef(ref: string, branch: string | undefined) {
   if (ref === 'WORKTREE') return 'working tree';
+  if (branch && /^HEAD(?=$|[~^])/.test(ref)) return branch + ref.slice(4);
   return /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 8) : ref;
 }
 
@@ -16,11 +18,11 @@ export interface TopBarProps {
   live: boolean;
   query: string;
   hits: number;
-  hideContext: boolean;
+  filter: GraphFilter;
   zoomLevel: ZoomLevel | undefined;
   onQuery(q: string): void;
   onSearchEnter(): void;
-  onToggleContext(): void;
+  onFilter(filter: GraphFilter): void;
   onZoomLevel(level: ZoomLevel): void;
   onCommit(message: string): Promise<void>;
   onFit(): void;
@@ -166,9 +168,9 @@ export const TopBar = forwardRef<HTMLInputElement, TopBarProps>(function TopBar(
         <div className="leading-tight">
           <div className="text-[13px] font-semibold text-ink">{repo}</div>
           <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink-faint">
-            <span>{shortRef(p.graph.meta.base)}</span>
+            <span>{shortRef(p.graph.meta.base, p.graph.meta.branch)}</span>
             <span>→</span>
-            <span>{shortRef(p.graph.meta.target)}</span>
+            <span>{shortRef(p.graph.meta.target, p.graph.meta.branch)}</span>
           </div>
         </div>
         <div className="mx-1 h-7 w-px bg-line" />
@@ -214,11 +216,26 @@ export const TopBar = forwardRef<HTMLInputElement, TopBarProps>(function TopBar(
           )}
         </label>
         <div className="mx-0.5 h-5 w-px bg-line" />
-        <button type="button" className={btn} onClick={p.onToggleContext} title="Show or hide unchanged neighbours">
-          {p.hideContext ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-          Context
-        </button>
-        <button type="button" className={btn} onClick={p.onFit} title="Fit to screen (F)">
+        <div role="radiogroup" aria-label="What to show" className="flex h-8 items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+          {GRAPH_FILTERS.filter((f) => f.id !== 'unstaged' || p.graph.meta.staging).map((f) => {
+            const on = p.filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-label={f.label}
+                onClick={() => p.onFilter(f.id)}
+                title={f.hint}
+                className={`h-7 rounded-md px-2.5 text-[12.5px] transition ${on ? 'bg-white/[0.10] text-ink shadow-sm' : 'text-ink-dim hover:bg-white/[0.06] hover:text-ink'}`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className={btn} onClick={p.onFit} title="Fit to screen (Shift+1)">
           <Scan className="size-3.5" />
         </button>
       </div>
@@ -253,13 +270,23 @@ export function Legend({ staging }: { staging: boolean }) {
           staged
         </span>
       )}
+      <span className="flex items-center gap-1.5">
+        <span className="w-2.5 border-t border-dashed border-white/25" />
+        <span className="font-mono text-[10px] uppercase text-accent">fn</span>
+        exported
+      </span>
+      <span className="flex items-center gap-1.5"><span className="font-mono text-[10px] uppercase text-ink-faint">fn</span>internal</span>
       <span className="h-3 w-px bg-line" />
       {line('var(--color-added)', 'new import')}
       {line('var(--color-removed)', 'removed import', true)}
       {line('#94a3b8', 'import')}
       <span className="text-ink-faint">→ points to the dependent</span>
       <span className="h-3 w-px bg-line" />
-      <span className="text-ink-faint">click name to expand · click block for diff</span>
+      <span className="text-ink-faint">click icon to expand · click name for diff</span>
+      <span className="flex items-center gap-1 text-ink-faint">
+        <kbd className="rounded border border-line px-1 font-mono text-[10px]">?</kbd>
+        shortcuts
+      </span>
     </div>
   );
 }

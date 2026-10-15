@@ -87,6 +87,32 @@ describe('git actions', () => {
     expect(cached()).toBe('');
   });
 
+  it('stages and unstages a rename whose old path is already gone from the index', async () => {
+    repo = new TempRepo();
+    const body = Array.from({ length: 10 }, (_, i) => `line ${i}`).join('\n') + '\n';
+    repo.write('old.ts', body).commit();
+    repo.remove('old.ts').write('new.ts', body.replace('line 3', 'line three'));
+    repo.git('rm', '-q', '--cached', 'old.ts'); // the deletion is staged, the new file is untracked
+    const actions = createGitActions(repo.root);
+
+    // The viewer sends both sides of a rename.
+    const flags = async () => {
+      const f = (await getChangeSet({ cwd: repo.root })).files.find((x) => x.path === 'new.ts')!;
+      return [f.staging!.hasStaged, f.staging!.hasUnstaged];
+    };
+    expect(await flags()).toEqual([false, true]);
+
+    await actions.stage({ action: 'stage', paths: ['new.ts', 'old.ts'] });
+    expect(repo.git('status', '--porcelain').trim()).toBe('R  old.ts -> new.ts');
+    expect(await flags()).toEqual([true, false]);
+    await actions.stage({ action: 'unstage', paths: ['new.ts', 'old.ts'] });
+    expect(cached()).toBe('');
+
+    // Unstaging an untracked side is a no-op, not an error.
+    await actions.stage({ action: 'unstage', paths: ['new.ts', 'old.ts'] });
+    expect(cached()).toBe('');
+  });
+
   it('commits only staged changes and refuses an empty index', async () => {
     repo = new TempRepo();
     repo.write('a.ts', 'a\n').write('b.ts', 'b\n').commit();

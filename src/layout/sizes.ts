@@ -7,6 +7,8 @@ import type { CodeGraph, DiffLine, GraphNode, NodeSize } from '../contracts/inde
 export const SIZES = {
   headerHeight: 40,
   padding: 14,
+  /** Left padding of files and classes: room for the line that marks an exported symbol. */
+  symbolGutter: 30,
   codeLineHeight: 18,
   codeMaxLines: 40,
   codeWidth: 620,

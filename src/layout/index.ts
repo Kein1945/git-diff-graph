@@ -54,7 +54,10 @@ const ROOT_OPTIONS: LayoutOptions = {
   'elk.padding': '[top=24,left=24,bottom=24,right=24]',
 };
 
-const CONTAINER_PADDING = `[top=${SIZES.headerHeight + 8},left=${SIZES.padding},bottom=${SIZES.padding},right=${SIZES.padding}]`;
+const containerPadding = (left: number) => `[top=${SIZES.headerHeight + 8},left=${left},bottom=${SIZES.padding},right=${SIZES.padding}]`;
+
+/** Blocks of one layer share their left edge instead of being centred on each other. */
+const NODE_OPTIONS: LayoutOptions = { 'elk.alignment': 'LEFT' };
 
 /** Resolves graph structure for a view state: who is visible, who is expanded, who stands in for whom. */
 export function resolveView(graph: CodeGraph, view: ViewState) {
@@ -122,12 +125,13 @@ export async function computeLayout(graph: CodeGraph, view: ViewState, engine?: 
   const toElk = (node: GraphNode): ElkNode => {
     const expanded = r.isExpanded(node.id);
     const showCode = r.showsCode(node.id);
-    if (!expanded) return { id: node.id, ...leafSize(graph, node, showCode) };
+    if (!expanded) return { id: node.id, layoutOptions: NODE_OPTIONS, ...leafSize(graph, node, showCode) };
     const min = leafSize(graph, node, false);
     return {
       id: node.id,
       layoutOptions: {
-        'elk.padding': CONTAINER_PADDING,
+        ...NODE_OPTIONS,
+        'elk.padding': containerPadding(node.kind === 'dir' ? SIZES.padding : SIZES.symbolGutter),
         'elk.nodeSize.constraints': 'MINIMUM_SIZE',
         'elk.nodeSize.minimum': `(${min.width}, ${SIZES.headerHeight + 40})`,
       },
@@ -155,7 +159,10 @@ export async function computeLayout(graph: CodeGraph, view: ViewState, engine?: 
     const b = r.ancestors(e.target);
     let lca = ROOT;
     for (let i = 0; i < Math.min(a.length, b.length) && a[i] === b[i]; i++) lca = a[i]!;
-    const edge: ElkExtendedEdge = { id: e.id, sources: [e.source], targets: [e.target] };
+    // ELK places sources left of targets. Import arrows point dependency → importer, but the
+    // importer must stay on the left, so ELK gets the edge reversed and the route is flipped back.
+    const [from, to] = e.kind === 'import' ? [e.target, e.source] : [e.source, e.target];
+    const edge: ElkExtendedEdge = { id: e.id, sources: [from], targets: [to] };
     containers.get(lca)!.edges!.push(edge);
   }
 
@@ -186,7 +193,10 @@ export async function computeLayout(graph: CodeGraph, view: ViewState, engine?: 
 
   return {
     nodes,
-    edges: visibleEdges.map((e) => ({ ...e, points: points.get(e.id) ?? [] })),
+    edges: visibleEdges.map((e) => {
+      const route = points.get(e.id) ?? [];
+      return { ...e, points: e.kind === 'import' ? route.reverse() : route };
+    }),
     width: out.width ?? 0,
     height: out.height ?? 0,
   };

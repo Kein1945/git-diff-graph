@@ -11,6 +11,7 @@ export interface SymbolChange {
   status: ChangeStatus;
   ranges: { old?: LineRange; new?: LineRange };
   stats: { add: number; del: number };
+  exported?: boolean;
 }
 
 interface Flat {
@@ -63,6 +64,7 @@ export function diffSymbols(
       status,
       ranges,
       stats,
+      ...(ref.info.exported !== undefined && { exported: ref.info.exported }),
     });
   }
 

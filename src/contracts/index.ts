@@ -40,7 +40,17 @@ export const FileChangeSchema = z.object({
    * `unstaged` = index → working tree hunks.
    */
   staging: z
-    .object({ indexContent: z.string().optional(), staged: z.array(HunkSchema), unstaged: z.array(HunkSchema) })
+    .object({
+      indexContent: z.string().optional(),
+      staged: z.array(HunkSchema),
+      unstaged: z.array(HunkSchema),
+      /**
+       * The file shows up in HEAD → index / index → working tree at all. Differs from "has hunks"
+       * for changes without line edits: a pure rename, a mode change, an empty file.
+       */
+      hasStaged: z.boolean().optional(),
+      hasUnstaged: z.boolean().optional(),
+    })
     .optional(),
 });
 
@@ -49,6 +59,8 @@ export const ChangeSetSchema = z.object({
   base: z.string(),
   /** A git ref, or `WORKTREE` for uncommitted changes including untracked files. */
   target: z.string(),
+  /** Branch checked out at HEAD (absent when HEAD is detached). Viewers show it instead of `HEAD`. */
+  branch: z.string().optional(),
   files: z.array(FileChangeSchema),
   /** All files tracked at `target` (used to find context neighbours). */
   repoFiles: z.array(z.string()),
@@ -98,6 +110,11 @@ export const GraphNodeSchema = z.object({
   language: z.string().optional(),
   /** How much of this node's change is in the git index (only when staging is available). */
   staged: StagedSchema.optional(),
+  /**
+   * Symbols only: `true` when the symbol is part of the module's public surface (exported),
+   * `false` when it is internal (not exported, private members). Absent when unknown.
+   */
+  exported: z.boolean().optional(),
 });
 
 export const EdgeKindSchema = z.enum(['import', 'call']);
@@ -135,6 +152,8 @@ export const CodeGraphSchema = z.object({
     repoRoot: z.string(),
     base: z.string(),
     target: z.string(),
+    /** Branch checked out at HEAD (absent when detached). */
+    branch: z.string().optional(),
     generatedAt: z.string(),
     /** Stage / unstage / commit are possible (HEAD → working tree). */
     staging: z.boolean(),

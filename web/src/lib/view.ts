@@ -19,37 +19,54 @@ export function nodeColor(n: GraphNode): string {
   return n.isContext ? STATUS_COLOR.context : STATUS_COLOR[n.status];
 }
 
+/**
+ * Diff panel width: room for 120 columns of 12px monospace code plus line numbers,
+ * but never more than half the screen.
+ */
+export const PANEL_MAX_PX = 1010;
+export const PANEL_WIDTH = `min(50vw, ${PANEL_MAX_PX}px)`;
+export const panelWidthPx = () => Math.min(window.innerWidth * 0.5, PANEL_MAX_PX);
+
+export type GraphFilter = 'context' | 'changes' | 'unstaged';
+
+export const GRAPH_FILTERS: { id: GraphFilter; label: string; hint: string }[] = [
+  { id: 'context', label: 'Context', hint: 'Changes plus unchanged files connected by imports' },
+  { id: 'changes', label: 'Changes', hint: 'Only what changed' },
+  { id: 'unstaged', label: 'Unstaged', hint: 'Only what is not fully staged yet' },
+];
+
+export function filterGraph(graph: CodeGraph, filter: GraphFilter): CodeGraph {
+  if (filter === 'context') return graph;
+  return filter === 'unstaged' ? withoutStaged(withoutContext(graph)) : withoutContext(graph);
+}
+
+/**
+ * Removes fully staged blocks with everything inside them, then containers left empty
+ * (directories and unchanged scopes that only held staged symbols).
+ */
+export function withoutStaged(graph: CodeGraph): CodeGraph {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const hidden = (n: GraphNode): boolean => {
+    for (let c: GraphNode | undefined = n; c; c = c.parentId ? byId.get(c.parentId) : undefined) if (c.staged === 'full') return true;
+    return false;
+  };
+  let nodes = graph.nodes.filter((n) => !hidden(n));
+  const hadChildren = new Set(graph.nodes.map((n) => n.parentId));
+  for (;;) {
+    const parents = new Set(nodes.map((n) => n.parentId));
+    const next = nodes.filter((n) => parents.has(n.id) || !hadChildren.has(n.id) || (n.kind !== 'dir' && n.status !== 'unchanged'));
+    if (next.length === nodes.length) break;
+    nodes = next;
+  }
+  const ids = new Set(nodes.map((n) => n.id));
+  return { ...graph, nodes, edges: graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target)) };
+}
+
 /** Removes unchanged context neighbours (and directories left empty). */
 export function withoutContext(graph: CodeGraph): CodeGraph {
   const nodes = graph.nodes.filter((n) => !n.isContext);
   const ids = new Set(nodes.map((n) => n.id));
   return { ...graph, nodes, edges: graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target)) };
-}
-
-/**
- * A readable first view: changed containers are opened breadth-first (directories before files,
- * shallow before deep) while the number of visible blocks stays within `budget`.
- * Unchanged context directories stay collapsed.
- */
-export function initialExpanded(graph: CodeGraph, budget = 28): Set<string> {
-  const children = new Map<string | undefined, GraphNode[]>();
-  for (const n of graph.nodes) children.set(n.parentId, [...(children.get(n.parentId) ?? []), n]);
-
-  const expanded = new Set<string>();
-  const top = children.get(undefined) ?? [];
-  let visible = top.length;
-  const order = (list: GraphNode[]) => [...list].sort((a, b) => Number(a.kind === 'file') - Number(b.kind === 'file'));
-  const queue = order(top);
-  while (queue.length) {
-    const n = queue.shift()!;
-    const kids = children.get(n.id);
-    if (!kids?.length || n.isContext || n.status === 'unchanged') continue;
-    if (visible - 1 + kids.length > budget) continue;
-    expanded.add(n.id);
-    visible += kids.length - 1;
-    queue.push(...order(kids));
-  }
-  return expanded;
 }
 
 export type ZoomLevel = 'modules' | 'files' | 'functions';

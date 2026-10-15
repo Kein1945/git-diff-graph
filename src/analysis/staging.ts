@@ -13,7 +13,8 @@ function verdict(staged: boolean, unstaged: boolean): Staged {
 /** How much of a file's change is in the index. Undefined when staging info is unavailable. */
 export function fileStaged(change: FileChange): Staged | undefined {
   const s = change.staging;
-  return s && verdict(s.staged.length > 0, s.unstaged.length > 0);
+  // A pure rename (or mode change) has no hunks: fall back to whether the file shows up at all.
+  return s && verdict(s.staged.length > 0 || !!s.hasStaged, s.unstaged.length > 0 || !!s.hasUnstaged);
 }
 
 /**

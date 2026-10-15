@@ -58,35 +58,49 @@ function isFunctionValue(value: Node | null): boolean {
   return false;
 }
 
+/** `export function f` / `export const f` (the declarator's statement is exported). */
+function isExported(node: Node): boolean {
+  const owner = node.type === 'variable_declarator' ? node.parent : node;
+  return owner?.parent?.type === 'export_statement';
+}
+
+/** `private x()`, `protected x()` and `#x()` are internal; other members inherit nothing. */
+function memberVisibility(node: Node): { exported?: boolean } {
+  const hidden =
+    node.childForFieldName('name')?.type === 'private_property_identifier' ||
+    node.namedChildren.some((c) => c.type === 'accessibility_modifier' && c.text !== 'public');
+  return hidden ? { exported: false } : {};
+}
+
 function symbolFor(node: Node, insideClass: boolean): Omit<SymbolInfo, 'children'> | undefined {
   switch (node.type) {
     case 'function_declaration':
     case 'generator_function_declaration': {
       const n = name(node.childForFieldName('name'));
-      return n ? { kind: 'function', name: n, range: lines(withExport(node)) } : undefined;
+      return n ? { kind: 'function', name: n, range: lines(withExport(node)), exported: isExported(node) } : undefined;
     }
     case 'class_declaration':
     case 'abstract_class_declaration':
     case 'class': {
       const n = name(node.childForFieldName('name')) ?? (node.parent?.type === 'export_statement' ? 'default' : undefined);
-      return n ? { kind: 'class', name: n, range: lines(withExport(node)) } : undefined;
+      return n ? { kind: 'class', name: n, range: lines(withExport(node)), exported: isExported(node) } : undefined;
     }
     case 'interface_declaration':
     case 'type_alias_declaration':
     case 'enum_declaration': {
       const n = name(node.childForFieldName('name'));
-      return n ? { kind: 'type', name: n, range: lines(withExport(node)) } : undefined;
+      return n ? { kind: 'type', name: n, range: lines(withExport(node)), exported: isExported(node) } : undefined;
     }
     case 'method_definition':
     case 'abstract_method_signature': {
       const n = name(node.childForFieldName('name'));
-      return n && insideClass ? { kind: 'method', name: n, range: lines(node) } : undefined;
+      return n && insideClass ? { kind: 'method', name: n, range: lines(node), ...memberVisibility(node) } : undefined;
     }
     case 'public_field_definition':
     case 'field_definition': {
       const n = name(node.childForFieldName('name') ?? node.childForFieldName('property'));
       return n && isFunctionValue(node.childForFieldName('value'))
-        ? { kind: 'method', name: n, range: lines(node) }
+        ? { kind: 'method', name: n, range: lines(node), ...memberVisibility(node) }
         : undefined;
     }
     case 'variable_declarator': {
@@ -95,10 +109,27 @@ function symbolFor(node: Node, insideClass: boolean): Omit<SymbolInfo, 'children
       // Single declarator: cover `export const` so the whole statement belongs to the symbol.
       const decl = node.parent;
       const outer = decl && decl.namedChildren.filter((c) => c.type === 'variable_declarator').length === 1 ? withExport(decl) : node;
-      return { kind: 'function', name: nameNode.text, range: lines(outer) };
+      return { kind: 'function', name: nameNode.text, range: lines(outer), exported: isExported(node) };
     }
   }
   return undefined;
+}
+
+/** Local names exported later in the file: `export { a, b as c }` and `export default a`. */
+function exportedNames(root: Node): Set<string> {
+  const out = new Set<string>();
+  for (const stmt of root.namedChildren) {
+    if (stmt.type !== 'export_statement' || stmt.childForFieldName('source')) continue;
+    for (const c of stmt.namedChildren) {
+      if (c.type === 'export_clause') {
+        for (const spec of c.namedChildren) {
+          const local = name(spec.childForFieldName('name'));
+          if (local) out.add(local);
+        }
+      } else if (c.type === 'identifier') out.add(c.text);
+    }
+  }
+  return out;
 }
 
 function collectSymbols(root: Node): SymbolInfo[] {
@@ -118,6 +149,8 @@ function collectSymbols(root: Node): SymbolInfo[] {
     }
   };
   visit(root, out, false);
+  const later = exportedNames(root);
+  for (const s of out) if (later.has(s.name)) s.exported = true;
   return out;
 }
 

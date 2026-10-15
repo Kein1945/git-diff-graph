@@ -46,6 +46,10 @@ body,
     height 380ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 200ms ease;
 }
+.react-flow__node:focus,
+.react-flow__node:focus-visible {
+  outline: none;
+}
 .vc-instant .react-flow__node {
   transition: none;
 }

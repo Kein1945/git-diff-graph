@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DiffLine, Hunk, LineRange, StageRequest } from '../contracts/index.js';
 import { applySelected, buildDiffView, mapLine, newSidePositions, textShape } from '../diff/index.js';
@@ -96,6 +96,30 @@ async function unstageRange(repoRoot: string, file: string, range: LineRange, si
   await writeIndex(repoRoot, file, applySelected(lines, (l) => !inRange(l, idx.get(l)!), textShape(index || head)));
 }
 
+const splitZ = (out: string | undefined) => (out ?? '').split('\0').filter(Boolean);
+
+/**
+ * Keeps only paths git can act on. Pathspecs that match nothing make `git add` / `git restore`
+ * fail as a whole, which happens with renames: the viewer sends both sides, and the old side may
+ * already be gone from the index (its deletion staged), the new side may be untracked.
+ */
+async function knownPaths(repoRoot: string, paths: string[], action: StageRequest['action']): Promise<string[]> {
+  const known = new Set(splitZ(await tryGit(repoRoot, ['ls-files', '--cached', '-z', '--', ...paths])));
+  if (action === 'stage') {
+    for (const p of paths) if (!known.has(p) && (await exists(path.join(repoRoot, p)))) known.add(p);
+  } else if (await hasCommits(repoRoot)) {
+    for (const p of splitZ(await tryGit(repoRoot, ['ls-tree', '-r', '--name-only', '-z', 'HEAD', '--', ...paths]))) known.add(p);
+  }
+  return paths.filter((p) => known.has(p));
+}
+
+async function exists(file: string): Promise<boolean> {
+  return access(file).then(
+    () => true,
+    () => false,
+  );
+}
+
 export function createGitActions(cwd: string): GitActions {
   const root = resolveRepoRoot(cwd);
   return {
@@ -108,10 +132,11 @@ export function createGitActions(cwd: string): GitActions {
           await fn(repoRoot, req.range.path, { start: req.range.start, end: req.range.end }, side);
           return;
         }
-        if (!req.paths.length) return;
-        if (req.action === 'stage') await git(repoRoot, ['add', '-A', '--', ...req.paths]);
-        else if (await hasCommits(repoRoot)) await git(repoRoot, ['restore', '--staged', '--', ...req.paths]);
-        else await git(repoRoot, ['rm', '--cached', '-r', '-q', '--ignore-unmatch', '--', ...req.paths]);
+        const paths = await knownPaths(repoRoot, req.paths, req.action);
+        if (!paths.length) return;
+        if (req.action === 'stage') await git(repoRoot, ['add', '-A', '--', ...paths]);
+        else if (await hasCommits(repoRoot)) await git(repoRoot, ['restore', '--staged', '--', ...paths]);
+        else await git(repoRoot, ['rm', '--cached', '-r', '-q', '--ignore-unmatch', '--', ...paths]);
       } catch (err) {
         throw gitError(err);
       }

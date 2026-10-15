@@ -49,7 +49,7 @@ git-diff-graph --cwd ../other-repo --port 5000 --no-open
 
 - **Zoom from architecture to code.** Folders, files, classes and functions nest inside each other. Open a function to read its diff right in the graph. The **Zoom ▾** menu folds everything back to Modules, Files or Functions in one click.
 - **Only what matters.** Changed files, the imports that were added or removed, and unchanged files that *depend* on your changes. Old imports to untouched files are hidden.
-- **Readable layout.** Blocks never overlap and arrows cross as little as possible. Arrows point from a dependency to its dependent (`api → component`).
+- **Readable layout.** Blocks never overlap and arrows cross as little as possible. Arrows point from a dependency to its dependent (`api → component`); the dependent sits on the left, its dependencies to the right.
 - **Stage and commit from the graph.** Hover a block and press **stage**: a folder, a file, or just the lines of one function go to the git index. Then **Commit** with a message.
 - **Live.** Edit code, or let your agent edit it, and the graph updates by itself.
 
