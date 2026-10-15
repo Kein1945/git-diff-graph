@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChangeSetSchema, WORKTREE } from '../contracts/index.js';
 import { TempRepo } from '../../test/fixtures/repo.js';
-import { closeGitReaders, createSourceReader, getChangeSet, parseUnifiedDiff } from './index.js';
+import { closeGitReaders, createSourceReader, getChangeSet, listIgnoredPaths, parseUnifiedDiff } from './index.js';
 
 let repo: TempRepo;
 afterEach(async () => {
@@ -120,5 +120,15 @@ describe('getChangeSet', () => {
     repo.write('a.ts', 'x\n');
     const cs = await getChangeSet({ cwd: repo.root });
     expect(cs.files.map((f) => [f.path, f.status])).toEqual([['a.ts', 'added']]);
+  });
+});
+
+describe('listIgnoredPaths', () => {
+  it('lists gitignored folders once and ignored files, without tracked or untracked ones', async () => {
+    repo = new TempRepo();
+    repo.write('.gitignore', 'dev/volumes/\n*.log\n').write('a.ts', 'a\n').commit();
+    repo.write('dev/volumes/db/data/pg', 'x').write('dev/compose.yml', 'y').write('err.log', 'z').write('b.ts', 'b\n');
+
+    expect(await listIgnoredPaths(repo.root)).toEqual(['dev/volumes', 'err.log']);
   });
 });

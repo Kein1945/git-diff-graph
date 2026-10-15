@@ -61,6 +61,17 @@ function splitZ(out: string): string[] {
   return out.split('\0').filter(Boolean);
 }
 
+/**
+ * Paths git ignores in the working tree (via .gitignore and friends), relative to the repo root,
+ * sorted. A fully ignored folder is listed once, without a trailing slash, and not descended into.
+ */
+export async function listIgnoredPaths(repoRoot: string): Promise<string[]> {
+  const out = await git(repoRoot, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z']);
+  return splitZ(out)
+    .map((p) => p.replace(/\/$/, ''))
+    .sort();
+}
+
 export function wholeFileHunk(content: string): Hunk {
   const lines = content.replace(/\r?\n$/, '').split(/\r?\n/);
   return {

@@ -19,6 +19,8 @@ export interface ServerOptions {
   port: number;
   /** Folder to watch for changes; omit to disable live updates. */
   watchRoot?: string;
+  /** Paths under `watchRoot` (relative, `/`-separated) not to watch; a folder covers its contents. */
+  ignoredPaths?: readonly string[];
   /** Enables POST /api/stage and /api/commit. */
   actions?: ServerActions;
   log?: (msg: string) => void;
@@ -44,13 +46,22 @@ const MIME: Record<string, string> = {
 
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', '.turbo', '.cache', 'bin', 'obj', '.vs', '.idea']);
 
-/** Ignore build output and git internals, but keep the git files that change on stage / commit / checkout. */
-export function isIgnoredPath(root: string, file: string): boolean {
+/**
+ * Ignore build output, git internals (but keep the git files that change on stage / commit /
+ * checkout) and `ignoredPaths` — repo-relative paths with `/` separators; a folder covers its contents.
+ */
+export function isIgnoredPath(root: string, file: string, ignoredPaths: ReadonlySet<string> = new Set()): boolean {
   const rel = path.relative(root, file).split(path.sep);
   if (rel[0] === '.git') {
     return !(rel.length === 1 || rel[1] === 'HEAD' || rel[1] === 'index' || rel[1] === 'refs');
   }
-  return rel.some((seg) => IGNORED_DIRS.has(seg));
+  if (rel.some((seg) => IGNORED_DIRS.has(seg))) return true;
+  let prefix = '';
+  for (const seg of rel) {
+    prefix = prefix ? `${prefix}/${seg}` : seg;
+    if (ignoredPaths.has(prefix)) return true;
+  }
+  return false;
 }
 
 /** Graph without volatile fields, to tell whether a rebuild actually changed anything. */
@@ -97,14 +108,18 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
       }
     }
   };
+  const ignoredPaths = new Set(opts.ignoredPaths);
   const watcher = opts.watchRoot
     ? watch(opts.watchRoot, {
-        ignored: (file) => isIgnoredPath(opts.watchRoot!, file),
+        ignored: (file) => isIgnoredPath(opts.watchRoot!, file, ignoredPaths),
         ignoreInitial: true,
-      }).on('all', () => {
-        clearTimeout(timer);
-        timer = setTimeout(rebuild, 300);
       })
+        .on('all', () => {
+          clearTimeout(timer);
+          timer = setTimeout(rebuild, 300);
+        })
+        // An unreadable folder (e.g. a container volume) must not take the server down.
+        .on('error', (err) => log(`watch: ${(err as Error).message}`))
     : undefined;
 
   // ── http ──

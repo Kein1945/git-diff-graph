@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
 import { WORKTREE } from './contracts/index.js';
 import { computeLayout } from './layout/index.js';
-import { createGitActions } from './git/index.js';
+import { createGitActions, listIgnoredPaths } from './git/index.js';
 import { createPipeline } from './pipeline.js';
 import { startServer } from './server/index.js';
 
@@ -41,6 +41,7 @@ cli
       webDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'web'),
       port: Number(flags.port),
       watchRoot: live ? cs.repoRoot : undefined,
+      ignoredPaths: live ? await listIgnoredPaths(cs.repoRoot) : undefined,
       actions: staging ? createGitActions(cs.repoRoot) : undefined,
       log: (msg) => console.log(`  ${msg}`),
     });
