@@ -1,6 +1,6 @@
 {
   "name": "git-diff-graph",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Visualize git diffs as an interactive graph: modules → files → functions → code, with import changes, stage and commit",
   "keywords": [
     "git",
@@ -44,7 +44,8 @@
     "dev:web": "vite --config web/vite.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "cac": "^7.1.0",

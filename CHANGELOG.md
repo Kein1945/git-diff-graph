@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 — 2026-10-15
+
+### Fixed
+
+- Live mode crashed with `EACCES` on folders it cannot read, such as Docker volumes, even when nothing in them had changed. The file watcher now skips everything git ignores (`.gitignore` and friends), and a watch error is logged instead of stopping the server.
+
+### Changed
+
+- `npm publish` runs typecheck, tests and build first (`prepublishOnly`).
+
 ## 0.2.0 — 2026-10-15
 
 ### Added
@@ -20,7 +30,6 @@
 
 ### Fixed
 
-- Live mode crashed with `EACCES` on folders it cannot read, such as Docker volumes, even when nothing in them had changed. The file watcher now skips everything git ignores (`.gitignore` and friends), and a watch error is logged instead of stopping the server.
 - Staging a renamed file failed with `pathspec … did not match any files` when the old path was already gone from the index.
 - A rename without line changes never showed as staged.
 - Row highlights in the diff panel no longer stop at the panel edge when you scroll sideways.
